@@ -1,0 +1,21 @@
+# Output
+output/
+
+# Cloned repos
+repos/
+
+# Venvs
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# User-defined config
+vars.py
+repos.txt
+
+# Tooling
+.claude/
+.factory/

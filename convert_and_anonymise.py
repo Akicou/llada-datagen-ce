@@ -9,21 +9,41 @@ from tools import tools_description
 # Anonymisation
 # ---------------------------------------------------------------------------
 
-# Matches the full repo-specific path (hash is 12 alphanumeric chars we used)
+# Matches common absolute repository paths from this pipeline across platforms.
+# Examples:
+#   /home/alice/llada-datagen-ce/repos/AbC123...
+#   C:/Users/Alice/llada-datagen-ce/repos/AbC123...
+#   C:\Users\Alice\llada-datagen-ce\repos\AbC123...
 _REPO_PATH_RE = re.compile(
-    r'C:/Users/lyani/ClaudeProjects/github-repos/llada-datagen-ce/repos/[A-Za-z0-9]+'
+    r'(?i)(?:[A-Z]:[\\/]|/)[^ \n\r\t"<>|]*?llada-datagen-ce[\\/]repos[\\/][A-Za-z0-9]+'
+)
+
+# Matches generic home-directory path segments to avoid leaking local usernames.
+# Examples:
+#   /home/alice/
+#   /Users/alice/
+#   C:\Users\Alice\
+_HOME_PREFIX_RE = re.compile(
+    r'(?i)(?:[A-Z]:[\\/]Users[\\/][^\\/:\n\r\t"<>|]+|/home/[^/:\n\r\t"<>|]+|/Users/[^/:\n\r\t"<>|]+)'
 )
 
 def anonymise(text: str) -> str:
     if not text:
         return text
-    # Most specific first
+    # Most specific first.
     text = _REPO_PATH_RE.sub('/home/user/project', text)
-    text = text.replace('C:/Users/lyani/ClaudeProjects/github-repos/llada-datagen-ce/', '/home/user/datagen/')
-    text = text.replace('C:/Users/lyani/', '/home/user/')
-    text = text.replace('lyani 197609', 'user 1000')
-    text = re.sub(r'\blyani\b', 'user', text)
+    text = _HOME_PREFIX_RE.sub('/home/user', text)
     return text
+
+
+def anonymise_jsonish(value):
+    if isinstance(value, str):
+        return anonymise(value)
+    if isinstance(value, list):
+        return [anonymise_jsonish(v) for v in value]
+    if isinstance(value, dict):
+        return {k: anonymise_jsonish(v) for k, v in value.items()}
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +111,7 @@ def convert_conversation(messages: list) -> list | None:
                         args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                     except json.JSONDecodeError:
                         args = {}
+                    args = anonymise_jsonish(args)
                     payload = json.dumps({'name': name, 'arguments': args}, ensure_ascii=False)
                     blocks.append(f'<tool_call>\n{payload}\n</tool_call>')
                 converted.append({'role': 'assistant', 'content': '\n'.join(blocks)})
